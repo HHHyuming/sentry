@@ -28,7 +28,7 @@ type Props = {
   organization: Organization;
 
   // used by multiProjectSelector
-  multiProjects: Array<any>;
+  multiProjects: Array<Project>;
 
   nonMemberProjects: Array<Project>;
 
@@ -40,7 +40,7 @@ type Props = {
   multi: boolean;
 
   // Use this if the component should be a controlled component
-  selectedProjects: Array<any>;
+  selectedProjects: Array<Project>;
 
   // Callback when a project is selected
   onSelect: (project: any) => void;
@@ -98,7 +98,7 @@ const ProjectSelector = ({
     const {nonMemberProjects = []} = props;
     return [
       sortBy(multiProjects, project => [
-        !selectedProjects.includes(project),
+        !selectedProjects.find(selectedProject => selectedProject.slug === project.slug),
         !project.isBookmarked,
         project.slug,
       ]),
@@ -116,7 +116,8 @@ const ProjectSelector = ({
     onSelect(project);
   };
 
-  const handleMultiSelect = (project, e) => {
+  const handleMultiSelect = (project, event: React.MouseEvent) => {
+    console.log('MULTI', project);
     const hasCallback = typeof onMultiSelect === 'function';
 
     if (!hasCallback) {
@@ -136,22 +137,27 @@ const ProjectSelector = ({
       selectedProjectsMap.set(project.slug, project);
     }
 
-    onMultiSelect(Array.from(selectedProjectsMap.values()), e);
+    const x = Array.from(selectedProjectsMap.values());
+    console.log('x', x);
+    onMultiSelect(x, event);
   };
 
   const getProjectItem = (project: Project) => ({
     value: project,
     searchKey: project.slug,
-    label: ({inputValue}: {inputValue: any}) => (
-      <SelectorItem
-        project={project}
-        organization={organization}
-        multi={multi}
-        inputValue={inputValue}
-        isChecked={!!selectedProjects.find(({slug}) => slug === project.slug)}
-        onMultiSelect={handleMultiSelect}
-      />
-    ),
+    label: ({inputValue}: {inputValue: any}) => {
+      console.log('inputValue', inputValue);
+      return (
+        <SelectorItem
+          project={project}
+          organization={organization}
+          multi={multi}
+          inputValue={inputValue}
+          isChecked={!!selectedProjects.find(({slug}) => slug === project.slug)}
+          onMultiSelect={handleMultiSelect}
+        />
+      );
+    },
   });
 
   const getItems = () => {
@@ -197,7 +203,7 @@ const ProjectSelector = ({
       virtualizedHeight={theme.headerSelectorRowHeight}
       virtualizedLabelHeight={theme.headerSelectorLabelHeight}
       emptyHidesInput={!paginated}
-      inputActions={() => (
+      inputActions={
         <AddButton
           disabled={!hasProjectWrite}
           to={`/organizations/${orgSlug}/projects/new/`}
@@ -209,7 +215,7 @@ const ProjectSelector = ({
         >
           {t('Project')}
         </AddButton>
-      )}
+      }
       menuFooter={renderProps => {
         const renderedFooter =
           typeof menuFooter === 'function' ? menuFooter(renderProps) : menuFooter;

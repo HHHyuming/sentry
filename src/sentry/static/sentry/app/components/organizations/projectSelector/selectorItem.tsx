@@ -184,7 +184,10 @@ const BadgeAndActionsWrapper = styled('div')<{bookmarkHasChanged: boolean}>`
   border-style: solid;
   border-width: 1px 0;
   border-color: transparent;
-  :hover ${StyledBookmarkStar}, :hover ${StyledLink} {
+  :hover ${StyledBookmarkStar} {
+    opacity: 1;
+  }
+  :hover ${StyledLink} {
     opacity: 1;
   }
 `;
