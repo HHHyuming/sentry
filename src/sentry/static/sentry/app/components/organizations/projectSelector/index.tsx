@@ -9,68 +9,62 @@ import DropdownAutoComplete from 'app/components/dropdownAutoComplete';
 import Button from 'app/components/button';
 import theme from 'app/utils/theme';
 import {IconAdd} from 'app/icons';
+import {GetActorPropsFn} from 'app/components/dropdownMenu';
 
 import SelectorItem from './selectorItem';
 
 const defaultProps = {
-  projectId: null,
   // Allow selecting multiple projects
   multi: false,
-  // Callback when a project is selected
-  onSelect: () => {},
 };
 
+//TODO(ts): replace the types below with the DropdownAutoComplete type
+type Actions = {
+  open: () => void;
+  close: () => void;
+};
 type ChildrenProps = {
-  selectedProjects: Array<Project>;
+  actions: Actions;
+  getActorProps: GetActorPropsFn;
+  getInputProps: Function;
+  isOpen: boolean;
+  selectedProjects: Project | null;
+};
+
+type MenuFooterProps = {
+  actions: Actions;
 };
 
 type Props = {
   organization: Organization;
-
   // used by multiProjectSelector
   multiProjects: Array<Project>;
-
   nonMemberProjects: Array<Project>;
-
   // Render a footer at the bottom of the list
-  // render function that is passed an `actions` object with `close` and `open` properties.
-  menuFooter: (prop: any) => React.ReactNode;
-
-  // Allow selecting multiple projects?
-  multi: boolean;
-
+  menuFooter: (prop: MenuFooterProps) => React.ReactNode;
   // Use this if the component should be a controlled component
   selectedProjects: Array<Project>;
-
   // Callback when a project is selected
-  onSelect: (project: any) => void;
-
+  onSelect: (project: Project) => void;
   // Callback when the menu is closed
   onClose: () => void;
-
   // Callback when the input filter changes
   onFilterChange: () => void;
-
   // Callback when the list is scrolled
   onScroll: () => void;
-
-  // Callback when projects are selected via the multiple project selector
-  // Calls back with (projects[], event)
-  onMultiSelect: (value: any, event: React.MouseEvent) => void;
-  rootClassName: string;
-
   // Represents if a search is taking place
   searching: boolean;
-
   // Represents if the current project selector is paginated or fully loaded.
   // Currently only used to ensure that in an empty state the input is not
   // hidden. This is for the case in which a user searches for a project which
   // does not exist. If we hide the input due to no results, the user cannot
   // recover.
   paginated: boolean;
-
   children: (props: ChildrenProps) => React.ReactNode;
-
+  // Callback when projects are selected via the multiple project selector
+  // Calls back with (projects[], event)
+  onMultiSelect?: (projects: Array<Project>, event: React.MouseEvent) => void;
+  rootClassName?: string;
   className?: string;
 } & typeof defaultProps;
 
@@ -92,8 +86,6 @@ const ProjectSelector = ({
   multi,
   ...props
 }: Props) => {
-  const orgSlug = organization.slug;
-
   const getProjects = () => {
     const {nonMemberProjects = []} = props;
     return [
@@ -108,19 +100,12 @@ const ProjectSelector = ({
 
   const [projects, nonMemberProjects] = getProjects();
 
-  const hasProjects = !!projects?.length || !!nonMemberProjects?.length;
-
-  const hasProjectWrite = organization.access.includes('project:write');
-
-  const handleSelect = ({value: project}) => {
+  const handleSelect = ({value: project}: {value: Project}) => {
     onSelect(project);
   };
 
-  const handleMultiSelect = (project, event: React.MouseEvent) => {
-    console.log('MULTI', project);
-    const hasCallback = typeof onMultiSelect === 'function';
-
-    if (!hasCallback) {
+  const handleMultiSelect = (project: Project, event: React.MouseEvent) => {
+    if (!onMultiSelect) {
       // eslint-disable-next-line no-console
       console.error(
         'ProjectSelector is a controlled component but `onMultiSelect` callback is not defined'
@@ -129,38 +114,35 @@ const ProjectSelector = ({
     }
 
     const selectedProjectsMap = new Map(selectedProjects.map(p => [p.slug, p]));
+
     if (selectedProjectsMap.has(project.slug)) {
       // unselected a project
 
       selectedProjectsMap.delete(project.slug);
-    } else {
-      selectedProjectsMap.set(project.slug, project);
+      onMultiSelect(Array.from(selectedProjectsMap.values()), event);
+      return;
     }
 
-    const x = Array.from(selectedProjectsMap.values());
-    console.log('x', x);
-    onMultiSelect(x, event);
+    selectedProjectsMap.set(project.slug, project);
+    onMultiSelect(Array.from(selectedProjectsMap.values()), event);
   };
 
   const getProjectItem = (project: Project) => ({
     value: project,
     searchKey: project.slug,
-    label: ({inputValue}: {inputValue: any}) => {
-      console.log('inputValue', inputValue);
-      return (
-        <SelectorItem
-          project={project}
-          organization={organization}
-          multi={multi}
-          inputValue={inputValue}
-          isChecked={!!selectedProjects.find(({slug}) => slug === project.slug)}
-          onMultiSelect={handleMultiSelect}
-        />
-      );
-    },
+    label: ({inputValue}: {inputValue: typeof project.slug}) => (
+      <SelectorItem
+        project={project}
+        organization={organization}
+        multi={multi}
+        inputValue={inputValue}
+        isChecked={!!selectedProjects.find(({slug}) => slug === project.slug)}
+        onMultiSelect={handleMultiSelect}
+      />
+    ),
   });
 
-  const getItems = () => {
+  const getItems = (hasProjects: boolean) => {
     if (!hasProjects) {
       return [];
     }
@@ -180,11 +162,13 @@ const ProjectSelector = ({
     ];
   };
 
+  const hasProjects = !!projects?.length || !!nonMemberProjects?.length;
+  const newProjectUrl = `/organizations/${organization.slug}/projects/new/`;
+  const hasProjectWrite = organization.access.includes('project:write');
+
   return (
     <DropdownAutoComplete
       alignMenu="left"
-      allowActorToggle
-      closeOnSelect
       blendCorner={false}
       searchPlaceholder={t('Filter projects')}
       onSelect={handleSelect}
@@ -194,7 +178,6 @@ const ProjectSelector = ({
       onScroll={onScroll}
       maxHeight={500}
       zIndex={theme.zIndex.dropdown}
-      css={{marginTop: 6}}
       inputProps={{style: {padding: 8, paddingLeft: 10}}}
       rootClassName={rootClassName}
       className={className}
@@ -206,7 +189,7 @@ const ProjectSelector = ({
       inputActions={
         <AddButton
           disabled={!hasProjectWrite}
-          to={`/organizations/${orgSlug}/projects/new/`}
+          to={newProjectUrl}
           size="xsmall"
           icon={<IconAdd size="xs" isCircled />}
           title={
@@ -217,8 +200,8 @@ const ProjectSelector = ({
         </AddButton>
       }
       menuFooter={renderProps => {
-        const renderedFooter =
-          typeof menuFooter === 'function' ? menuFooter(renderProps) : menuFooter;
+        const renderedFooter = menuFooter(renderProps);
+
         const showCreateProjectButton = !hasProjects && hasProjectWrite;
 
         if (!renderedFooter && !showCreateProjectButton) {
@@ -228,11 +211,7 @@ const ProjectSelector = ({
         return (
           <React.Fragment>
             {showCreateProjectButton && (
-              <CreateProjectButton
-                priority="primary"
-                size="small"
-                to={`/organizations/${orgSlug}/projects/new/`}
-              >
+              <CreateProjectButton priority="primary" size="small" to={newProjectUrl}>
                 {t('Create project')}
               </CreateProjectButton>
             )}
@@ -240,14 +219,11 @@ const ProjectSelector = ({
           </React.Fragment>
         );
       }}
-      items={getItems()}
+      items={getItems(hasProjects)}
+      allowActorToggle
+      closeOnSelect
     >
-      {renderProps =>
-        children({
-          ...renderProps,
-          selectedProjects,
-        })
-      }
+      {renderProps => children({...renderProps, selectedProjects})}
     </DropdownAutoComplete>
   );
 };
