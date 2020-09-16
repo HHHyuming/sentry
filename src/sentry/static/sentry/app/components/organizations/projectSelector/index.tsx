@@ -10,6 +10,8 @@ import Button from 'app/components/button';
 import theme from 'app/utils/theme';
 import {IconAdd} from 'app/icons';
 
+import SelectorItem from './selectorItem';
+
 const defaultProps = {
   projectId: null,
   // Allow selecting multiple projects
@@ -26,22 +28,22 @@ type Props = {
   organization: Organization;
 
   // used by multiProjectSelector
-  multiProjects: Array<string> | Array<Project>;
+  multiProjects: Array<any>;
 
   nonMemberProjects: Array<Project>;
 
   // Render a footer at the bottom of the list
   // render function that is passed an `actions` object with `close` and `open` properties.
-  menuFooter: () => React.ReactNode;
+  menuFooter: (prop: any) => React.ReactNode;
 
   // Allow selecting multiple projects?
   multi: boolean;
 
   // Use this if the component should be a controlled component
-  selectedProjects: Array<Project>;
+  selectedProjects: Array<any>;
 
   // Callback when a project is selected
-  onSelect: () => void;
+  onSelect: (project: any) => void;
 
   // Callback when the menu is closed
   onClose: () => void;
@@ -54,7 +56,7 @@ type Props = {
 
   // Callback when projects are selected via the multiple project selector
   // Calls back with (projects[], event)
-  onMultiSelect: () => void;
+  onMultiSelect: (value: any, event: React.MouseEvent) => void;
   rootClassName: string;
 
   // Represents if a search is taking place
@@ -72,14 +74,28 @@ type Props = {
   className?: string;
 } & typeof defaultProps;
 
-type State = {
-  selectedProjects: any;
-};
+const ProjectSelector = ({
+  children,
+  organization,
+  menuFooter,
+  className,
+  rootClassName,
+  onClose,
+  onFilterChange,
+  onScroll,
+  searching,
+  paginated,
+  multiProjects,
+  selectedProjects = [],
+  onSelect,
+  onMultiSelect,
+  multi,
+  ...props
+}: Props) => {
+  const orgSlug = organization.slug;
 
-const  ProjectSelector= () => {
-  getProjects = () => {
-    const {multiProjects, nonMemberProjects = [], selectedProjects = []} = this.props;
-
+  const getProjects = () => {
+    const {nonMemberProjects = []} = props;
     return [
       sortBy(multiProjects, project => [
         !selectedProjects.includes(project),
@@ -88,15 +104,19 @@ const  ProjectSelector= () => {
       ]),
       sortBy(nonMemberProjects, project => [project.slug]),
     ];
-  }
+  };
 
-  handleSelect = ({value: project}) => {
-    const {onSelect} = this.props;
+  const [projects, nonMemberProjects] = getProjects();
+
+  const hasProjects = !!projects?.length || !!nonMemberProjects?.length;
+
+  const hasProjectWrite = organization.access.includes('project:write');
+
+  const handleSelect = ({value: project}) => {
     onSelect(project);
   };
 
-  handleMultiSelect = (project, e) => {
-    const {onMultiSelect, selectedProjects} = this.props;
+  const handleMultiSelect = (project, e) => {
     const hasCallback = typeof onMultiSelect === 'function';
 
     if (!hasCallback) {
@@ -119,139 +139,112 @@ const  ProjectSelector= () => {
     onMultiSelect(Array.from(selectedProjectsMap.values()), e);
   };
 
-  getProjectItem = (project: Project) => {
-    const {multi} = this.props;
-    return {
-      value: project,
-      searchKey: project.slug,
-      label: ({inputValue}) => (
-        <ProjectSelectorItem
-          project={project}
-          organization={org}
-          multi={multi}
-          inputValue={inputValue}
-          isChecked={
-            !!this.props.selectedProjects.find(({slug}) => slug === project.slug)
-          }
-          style={{padding: 0}}
-          onMultiSelect={this.handleMultiSelect}
-        />
-      ),
-    };
-  };
+  const getProjectItem = (project: Project) => ({
+    value: project,
+    searchKey: project.slug,
+    label: ({inputValue}: {inputValue: any}) => (
+      <SelectorItem
+        project={project}
+        organization={organization}
+        multi={multi}
+        inputValue={inputValue}
+        isChecked={!!selectedProjects.find(({slug}) => slug === project.slug)}
+        onMultiSelect={handleMultiSelect}
+      />
+    ),
+  });
 
-  getItems(projects: Array<Project>, nonMemberProjects: Array<Project>) {
+  const getItems = () => {
+    if (!hasProjects) {
+      return [];
+    }
+
     return [
       {
         hideGroupLabel: true,
-        items: projects.map(this.getProjectItem),
+        items: projects.map(getProjectItem),
       },
       {
         hideGroupLabel: nonMemberProjects.length === 0,
         itemSize: 'small',
         id: 'no-membership-header', // needed for tests for non-virtualized lists
         label: <Label>{t("Projects I don't belong to")}</Label>,
-        items: nonMemberProjects.map(this.getProjectItem),
+        items: nonMemberProjects.map(getProjectItem),
       },
     ];
-  }
+  };
 
-  render() {
-    const {
-      children,
-      organization,
-      menuFooter,
-      className,
-      rootClassName,
-      onClose,
-      onFilterChange,
-      onScroll,
-      searching,
-      paginated,
-    } = this.props;
-
-    const orgSlug = organization.slug;
-
-    const [projects, nonMemberProjects] = this.getProjects();
-
-    const hasProjects = !!projects?.length || !!nonMemberProjects?.length;
-
-    const hasProjectWrite = organization.access.includes('project:write');
-
-    return (
-      <DropdownAutoComplete
-        alignMenu="left"
-        allowActorToggle
-        closeOnSelect
-        blendCorner={false}
-        searchPlaceholder={t('Filter projects')}
-        onSelect={this.handleSelect}
-        onClose={onClose}
-        onChange={onFilterChange}
-        busyItemsStillVisible={searching}
-        onScroll={onScroll}
-        maxHeight={500}
-        zIndex={theme.zIndex.dropdown}
-        css={{marginTop: 6}}
-        inputProps={{style: {padding: 8, paddingLeft: 10}}}
-        rootClassName={rootClassName}
-        className={className}
-        emptyMessage={t('You have no projects')}
-        noResultsMessage={t('No projects found')}
-        virtualizedHeight={theme.headerSelectorRowHeight}
-        virtualizedLabelHeight={theme.headerSelectorLabelHeight}
-        emptyHidesInput={!paginated}
-        inputActions={() => (
-          <AddButton
-            disabled={!hasProjectWrite}
-            to={`/organizations/${orgSlug}/projects/new/`}
-            size="xsmall"
-            icon={<IconAdd size="xs" isCircled />}
-            title={
-              !hasProjectWrite
-                ? t("You don't have permission to add a project")
-                : undefined
-            }
-          >
-            {t('Project')}
-          </AddButton>
-        )}
-        menuFooter={renderProps => {
-          const renderedFooter =
-            typeof menuFooter === 'function' ? menuFooter(renderProps) : menuFooter;
-          const showCreateProjectButton = !hasProjects && hasProjectWrite;
-
-          if (!renderedFooter && !showCreateProjectButton) {
-            return null;
+  return (
+    <DropdownAutoComplete
+      alignMenu="left"
+      allowActorToggle
+      closeOnSelect
+      blendCorner={false}
+      searchPlaceholder={t('Filter projects')}
+      onSelect={handleSelect}
+      onClose={onClose}
+      onChange={onFilterChange}
+      busyItemsStillVisible={searching}
+      onScroll={onScroll}
+      maxHeight={500}
+      zIndex={theme.zIndex.dropdown}
+      css={{marginTop: 6}}
+      inputProps={{style: {padding: 8, paddingLeft: 10}}}
+      rootClassName={rootClassName}
+      className={className}
+      emptyMessage={t('You have no projects')}
+      noResultsMessage={t('No projects found')}
+      virtualizedHeight={theme.headerSelectorRowHeight}
+      virtualizedLabelHeight={theme.headerSelectorLabelHeight}
+      emptyHidesInput={!paginated}
+      inputActions={() => (
+        <AddButton
+          disabled={!hasProjectWrite}
+          to={`/organizations/${orgSlug}/projects/new/`}
+          size="xsmall"
+          icon={<IconAdd size="xs" isCircled />}
+          title={
+            !hasProjectWrite ? t("You don't have permission to add a project") : undefined
           }
+        >
+          {t('Project')}
+        </AddButton>
+      )}
+      menuFooter={renderProps => {
+        const renderedFooter =
+          typeof menuFooter === 'function' ? menuFooter(renderProps) : menuFooter;
+        const showCreateProjectButton = !hasProjects && hasProjectWrite;
 
-          return (
-            <React.Fragment>
-              {showCreateProjectButton && (
-                <CreateProjectButton
-                  priority="primary"
-                  size="small"
-                  to={`/organizations/${orgSlug}/projects/new/`}
-                >
-                  {t('Create project')}
-                </CreateProjectButton>
-              )}
-              {renderedFooter}
-            </React.Fragment>
-          );
-        }}
-        items={hasProjects ? this.getItems(projects, nonMemberProjects) : []}
-      >
-        {renderProps =>
-          children({
-            ...renderProps,
-            selectedProjects: this.props.selectedProjects,
-          })
+        if (!renderedFooter && !showCreateProjectButton) {
+          return null;
         }
-      </DropdownAutoComplete>
-    );
-  }
-}
+
+        return (
+          <React.Fragment>
+            {showCreateProjectButton && (
+              <CreateProjectButton
+                priority="primary"
+                size="small"
+                to={`/organizations/${orgSlug}/projects/new/`}
+              >
+                {t('Create project')}
+              </CreateProjectButton>
+            )}
+            {renderedFooter}
+          </React.Fragment>
+        );
+      }}
+      items={getItems()}
+    >
+      {renderProps =>
+        children({
+          ...renderProps,
+          selectedProjects,
+        })
+      }
+    </DropdownAutoComplete>
+  );
+};
 
 export default ProjectSelector;
 
